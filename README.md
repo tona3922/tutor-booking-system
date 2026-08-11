@@ -10,9 +10,9 @@ the reasoning, the rules this enforces, and what's deliberately left out of scop
 - `frontend/` — React + Vite + TypeScript: a single schedule view for one day at a time, with
   conflicts highlighted and a form to add a lesson.
 ## Diagram
-High-level design diagram
-https://chatgpt.com/backend-api/estuary/content?id=file_000000005974820b896a76421f17eccb&ts=496240&p=fs&cid=1&sig=ba993656df23ddfd6e2ce675a89f3ea6e9f4f05fe699c6448192826b7d76d382&v=0
-Use-case diagram
+- High-level design diagram
+<img width="877" height="582" alt="image" src="https://github.com/user-attachments/assets/c911d832-6ee8-49c1-80a1-7442d56eb513" />
+- Use-case diagram
 <img width="792" height="648" alt="image" src="https://github.com/user-attachments/assets/e9758022-878f-49e5-a1d4-53b4f53914c1" />
 
 ## Domain model
