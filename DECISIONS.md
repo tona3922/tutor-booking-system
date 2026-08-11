@@ -3,7 +3,7 @@
 ## 1. Context
 
 Bright Path is a small tutoring centre with 6 rooms and 12 tutors, run day-to-day by a receptionist
-booking 1:1, 60- or 90-minute lessons by hand. The one failure that matters to the owner is a room,
+booking 1:1, 60 or 90-minute lessons by hand. The one failure that matters to the owner is a room,
 tutor, or student getting double-booked — "if the system allows it, the system is broken." This system
 replaces manual booking with an app that a family can use directly, with double-booking prevented
 structurally (server-side, before a lesson is ever saved) instead of depending on someone holding the
@@ -43,12 +43,6 @@ whole day's schedule in their head.
 - `Room(id, label)` — 6 fixed rows.
 - `Lesson(id, date, startTime, durationMin, student, tutorId, roomId, status, cancelledAt, note, movedFromLessonId, createdAt)`
   `status ∈ {BOOKED, CANCELLED, NO_SHOW, MOVED}`.
-
-```
-BOOKED / NO_SHOW  → occupy the room + tutor + student slot
-CANCELLED / MOVED → free it
-```
-
 - Cancelling sets `status → CANCELLED` and records `cancelledAt`; the row is never deleted.
 - Rescheduling never mutates a lesson in place: the old row's `status → MOVED` (`cancelledAt` stays
   null), and a new row is inserted with `movedFromLessonId` pointing back at it. There is no
@@ -69,21 +63,7 @@ CANCELLED / MOVED → free it
 
 ## 5. High-level Design
 
-```mermaid
-graph TD
-  Browser["Browser — React 19 + Vite<br/>RoomBoard · AddLessonDialog · EditLessonForm"]
-  Browser -->|"HTTP / JSON<br/>/api/*"| Controllers
-
-  subgraph Service["brightpath-service — Spring Boot"]
-    Controllers["Controllers<br/>Lesson · Tutor · Room"] --> Rules
-    Rules["LessonService<br/>overlap · exam-pair · 6/day cap · closed Monday · 4h cancel"] --> Repos
-    Repos["Repositories — Spring Data JPA"]
-  end
-
-  Repos -->|"row locks + advisory lock"| DB[("PostgreSQL<br/>room · tutor · lesson")]
-  CSV["Front-desk CSV backfill<br/>(offline, via psql)"] -.->|"direct INSERT — no validation"| DB
-  DB -.->|"GET /api/conflicts<br/>rescans committed rows"| Rules
-```
+<img width="877" height="582" alt="image" src="https://github.com/user-attachments/assets/0d4ca9e5-fc0a-422f-b59f-fa8ee106cd4f" />
 
 ## 6. Flow
 
