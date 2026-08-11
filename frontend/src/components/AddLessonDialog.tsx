@@ -1,6 +1,7 @@
-import { useState } from 'react'
-import type { Room, Tutor } from '../api'
+import { useMemo, useState } from 'react'
+import type { Lesson, Room, Tutor } from '../api'
 import { ApiError, lessonApi } from '../api'
+import { addMinutesToTime, formatTime, generateTimeSlots, timeRangesOverlap } from '../lib/time'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -26,10 +27,15 @@ interface Props {
   date: string
   tutors: Tutor[]
   rooms: Room[]
+  lessons: Lesson[]
   onCreated: () => void
 }
 
-export function AddLessonDialog({ open, onOpenChange, date, tutors, rooms, onCreated }: Props) {
+const OCCUPYING: Lesson['status'][] = ['BOOKED', 'NO_SHOW']
+const MAX_BOOKINGS_PER_TUTOR_PER_DAY = 6
+const TIME_SLOTS = generateTimeSlots(8 * 60, 21 * 60 + 30, 30)
+
+export function AddLessonDialog({ open, onOpenChange, date, tutors, rooms, lessons, onCreated }: Props) {
   const [student, setStudent] = useState('')
   const [tutorId, setTutorId] = useState<string>('')
   const [roomId, setRoomId] = useState<string>('')
@@ -38,6 +44,32 @@ export function AddLessonDialog({ open, onOpenChange, date, tutors, rooms, onCre
   const [note, setNote] = useState('')
   const [conflictMessages, setConflictMessages] = useState<string[]>([])
   const [submitting, setSubmitting] = useState(false)
+
+  const tutorLoad = useMemo(() => {
+    const counts = new Map<number, number>()
+    for (const l of lessons) {
+      if (!OCCUPYING.includes(l.status)) continue
+      counts.set(l.tutorId, (counts.get(l.tutorId) ?? 0) + 1)
+    }
+    return counts
+  }, [lessons])
+
+  const bookedSlots = useMemo(() => {
+    const roomIdNum = Number(roomId)
+    const tutorIdNum = Number(tutorId)
+    const duration = Number(durationMin)
+    const disabled = new Set<string>()
+    for (const slot of TIME_SLOTS) {
+      const overlapsExisting = lessons.some(
+        (l) =>
+          OCCUPYING.includes(l.status) &&
+          ((roomId !== '' && l.roomId === roomIdNum) || (tutorId !== '' && l.tutorId === tutorIdNum)) &&
+          timeRangesOverlap(slot, duration, l.startTime, l.durationMin),
+      )
+      if (overlapsExisting) disabled.add(slot)
+    }
+    return disabled
+  }, [lessons, roomId, tutorId, durationMin])
 
   const reset = () => {
     setStudent('')
@@ -52,8 +84,27 @@ export function AddLessonDialog({ open, onOpenChange, date, tutors, rooms, onCre
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!student.trim() || !tutorId || !roomId) return
-    setSubmitting(true)
     setConflictMessages([])
+
+    const duration = Number(durationMin)
+    const overlapping = lessons.filter(
+      (l) =>
+        OCCUPYING.includes(l.status) &&
+        (l.roomId === Number(roomId) || l.tutorId === Number(tutorId)) &&
+        timeRangesOverlap(startTime, duration, l.startTime, l.durationMin),
+    )
+    if (overlapping.length > 0) {
+      setConflictMessages(
+        overlapping.map((l) => {
+          const resource = l.roomId === Number(roomId) ? 'Room' : 'Tutor'
+          const end = addMinutesToTime(l.startTime, l.durationMin)
+          return `${resource} already booked ${formatTime(l.startTime)}–${formatTime(end)}`
+        }),
+      )
+      return
+    }
+
+    setSubmitting(true)
     try {
       await lessonApi.create({
         date,
@@ -98,9 +149,15 @@ export function AddLessonDialog({ open, onOpenChange, date, tutors, rooms, onCre
               <Select value={tutorId} onValueChange={setTutorId}>
                 <SelectTrigger className="w-full"><SelectValue placeholder="Select tutor" /></SelectTrigger>
                 <SelectContent>
-                  {tutors.map((t) => (
-                    <SelectItem key={t.id} value={String(t.id)}>{t.name} ({t.subject})</SelectItem>
-                  ))}
+                  {tutors.map((t) => {
+                    const load = tutorLoad.get(t.id) ?? 0
+                    const full = load >= MAX_BOOKINGS_PER_TUTOR_PER_DAY
+                    return (
+                      <SelectItem key={t.id} value={String(t.id)} disabled={full}>
+                        {t.name} ({t.subject}){full ? ' — full for this day' : ''}
+                      </SelectItem>
+                    )
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -119,8 +176,20 @@ export function AddLessonDialog({ open, onOpenChange, date, tutors, rooms, onCre
 
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="startTime">Start time</Label>
-              <Input id="startTime" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} required />
+              <Label>Start time</Label>
+              <Select value={startTime} onValueChange={setStartTime}>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {TIME_SLOTS.map((slot) => {
+                    const disabled = bookedSlots.has(slot)
+                    return (
+                      <SelectItem key={slot} value={slot} disabled={disabled}>
+                        {slot}{disabled ? ' — booked' : ''}
+                      </SelectItem>
+                    )
+                  })}
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Duration</Label>

@@ -19,11 +19,21 @@ INSERT INTO room (id, label) VALUES
   (6, 'R6')
 ON CONFLICT (id) DO NOTHING;
 
--- The centre has 12 tutors on payroll; tutors.csv only exercises these 3.
+-- The centre has 12 tutors on payroll, 3 per subject across the 4 subjects it teaches;
+-- tutors.csv (and the lesson history below) only exercises the first 3.
 INSERT INTO tutor (id, name, subject, phone) VALUES
-  (1, 'Ngoc Anh', 'Maths', '090xxx1122'),
-  (2, 'Pham Duc', 'English', '090xxx3344'),
-  (3, 'Le Thu', 'Physics', '090xxx5566')
+  (1,  'Ngoc Anh',    'Maths',     '090xxx1122'),
+  (2,  'Pham Duc',    'English',   '090xxx3344'),
+  (3,  'Le Thu',      'Physics',   '090xxx5566'),
+  (4,  'Tran Minh',   'Chemistry', '090xxx7788'),
+  (5,  'Nguyen Lan',  'Maths',     '090xxx9900'),
+  (6,  'Hoang Nam',   'Maths',     '090xxx1133'),
+  (7,  'Vu Linh',     'English',   '090xxx2244'),
+  (8,  'Dang Khoi',   'English',   '090xxx3355'),
+  (9,  'Bui Trang',   'Physics',   '090xxx4466'),
+  (10, 'Do Hai',      'Physics',   '090xxx5577'),
+  (11, 'Ly Giang',    'Chemistry', '090xxx6688'),
+  (12, 'Phan Yen',    'Chemistry', '090xxx7799')
 ON CONFLICT (id) DO NOTHING;
 
 -- lessons_export.csv, L001-L034, loaded as-is (including its rule violations - see
