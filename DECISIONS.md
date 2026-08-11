@@ -54,8 +54,6 @@ CANCELLED / MOVED → free it
   null), and a new row is inserted with `movedFromLessonId` pointing back at it. There is no
   `PUT /api/lessons/{id}` — every move goes through `reschedule`, so a change is always a new row, never a
   silent overwrite.
-- Only structural invariants live in the database (`tutor_id`/`room_id` NOT NULL, the `status` enum) —
-  every scheduling _rule_ lives in code (§7.1 explains why for the overlap check specifically).
 
 ## 4. API Design
 
@@ -86,11 +84,6 @@ graph TD
   CSV["Front-desk CSV backfill<br/>(offline, via psql)"] -.->|"direct INSERT — no validation"| DB
   DB -.->|"GET /api/conflicts<br/>rescans committed rows"| Rules
 ```
-
-The dashed edges are the one thing worth noticing: a lesson can reach `lesson` either through
-`LessonService` (validated) or through the offline CSV backfill (not validated at all). `GET
-/api/conflicts` exists specifically to catch what the second path lets through — it doesn't stop a bad
-row from existing, it makes sure nobody can miss one once it does.
 
 ## 6. Flow
 
