@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Lesson, Room, Tutor } from '../api'
 import { ApiError, lessonApi } from '../api'
-import { addMinutesToTime, formatTime, generateTimeSlots, isMonday, timeRangesOverlap } from '../lib/time'
+import { addMinutesToTime, formatTime, generateTimeSlots, timeRangesOverlap } from '../lib/time'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -11,7 +11,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -22,37 +21,51 @@ import {
 } from '@/components/ui/select'
 
 interface Props {
+  lesson: Lesson | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  date: string
   tutors: Tutor[]
   rooms: Room[]
   lessons: Lesson[]
-  currentUser: string
-  onCreated: () => void
+  onUpdated: () => void
 }
 
 const OCCUPYING: Lesson['status'][] = ['BOOKED', 'NO_SHOW']
 const MAX_BOOKINGS_PER_TUTOR_PER_DAY = 6
 const TIME_SLOTS = generateTimeSlots(8 * 60, 21 * 60 + 30, 30)
 
-export function AddLessonDialog({ open, onOpenChange, date, tutors, rooms, lessons, currentUser, onCreated }: Props) {
-  const [tutorId, setTutorId] = useState<string>('')
-  const [roomId, setRoomId] = useState<string>('')
+export function EditLessonDialog({ lesson, open, onOpenChange, tutors, rooms, lessons, onUpdated }: Props) {
+  const [tutorId, setTutorId] = useState('')
+  const [roomId, setRoomId] = useState('')
   const [startTime, setStartTime] = useState('09:00')
-  const [durationMin, setDurationMin] = useState<string>('60')
-  const [note, setNote] = useState('')
+  const [durationMin, setDurationMin] = useState('60')
   const [conflictMessages, setConflictMessages] = useState<string[]>([])
   const [submitting, setSubmitting] = useState(false)
 
+  useEffect(() => {
+    if (lesson && open) {
+      setTutorId(String(lesson.tutorId))
+      setRoomId(String(lesson.roomId))
+      setStartTime(formatTime(lesson.startTime))
+      setDurationMin(String(lesson.durationMin))
+      setConflictMessages([])
+    }
+  }, [lesson, open])
+
+  // Excludes the lesson being edited so it never conflicts with its own current slot.
+  const otherLessons = useMemo(
+    () => lessons.filter((l) => l.id !== lesson?.id),
+    [lessons, lesson],
+  )
+
   const tutorLoad = useMemo(() => {
     const counts = new Map<number, number>()
-    for (const l of lessons) {
+    for (const l of otherLessons) {
       if (!OCCUPYING.includes(l.status)) continue
       counts.set(l.tutorId, (counts.get(l.tutorId) ?? 0) + 1)
     }
     return counts
-  }, [lessons])
+  }, [otherLessons])
 
   const bookedSlots = useMemo(() => {
     const roomIdNum = Number(roomId)
@@ -60,7 +73,7 @@ export function AddLessonDialog({ open, onOpenChange, date, tutors, rooms, lesso
     const duration = Number(durationMin)
     const disabled = new Set<string>()
     for (const slot of TIME_SLOTS) {
-      const overlapsExisting = lessons.some(
+      const overlapsExisting = otherLessons.some(
         (l) =>
           OCCUPYING.includes(l.status) &&
           ((roomId !== '' && l.roomId === roomIdNum) || (tutorId !== '' && l.tutorId === tutorIdNum)) &&
@@ -69,29 +82,17 @@ export function AddLessonDialog({ open, onOpenChange, date, tutors, rooms, lesso
       if (overlapsExisting) disabled.add(slot)
     }
     return disabled
-  }, [lessons, roomId, tutorId, durationMin])
+  }, [otherLessons, roomId, tutorId, durationMin])
 
-  const reset = () => {
-    setTutorId('')
-    setRoomId('')
-    setStartTime('09:00')
-    setDurationMin('60')
-    setNote('')
-    setConflictMessages([])
-  }
+  if (!lesson) return null
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!currentUser.trim() || !tutorId || !roomId) return
+    if (!tutorId || !roomId) return
     setConflictMessages([])
 
-    if (isMonday(date)) {
-      setConflictMessages(['The centre is closed on Mondays'])
-      return
-    }
-
     const duration = Number(durationMin)
-    const overlapping = lessons.filter(
+    const overlapping = otherLessons.filter(
       (l) =>
         OCCUPYING.includes(l.status) &&
         (l.roomId === Number(roomId) || l.tutorId === Number(tutorId)) &&
@@ -110,18 +111,16 @@ export function AddLessonDialog({ open, onOpenChange, date, tutors, rooms, lesso
 
     setSubmitting(true)
     try {
-      await lessonApi.create({
-        date,
+      await lessonApi.reschedule(lesson.id, {
+        date: lesson.date,
         startTime,
-        durationMin: Number(durationMin),
-        student: currentUser.trim(),
+        durationMin: duration,
         tutorId: Number(tutorId),
         roomId: Number(roomId),
-        note: note.trim() || undefined,
+        note: lesson.note ?? undefined,
       })
-      reset()
       onOpenChange(false)
-      onCreated()
+      onUpdated()
     } catch (err) {
       if (err instanceof ApiError && err.conflicts?.length) {
         setConflictMessages(err.conflicts.map((c) => c.message))
@@ -134,21 +133,16 @@ export function AddLessonDialog({ open, onOpenChange, date, tutors, rooms, lesso
   }
 
   return (
-    <Dialog open={open} onOpenChange={(next) => { onOpenChange(next); if (!next) reset() }}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Add lesson</DialogTitle>
-          <DialogDescription>Scheduling for {date}. Conflicts are checked before the lesson is saved.</DialogDescription>
+          <DialogTitle>Edit lesson</DialogTitle>
+          <DialogDescription>
+            Moving {lesson.student}'s lesson on {lesson.date}. Conflicts are checked before saving.
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Label>Student</Label>
-            <div className="flex h-8 items-center rounded-lg border border-input bg-muted/30 px-2.5 text-sm text-muted-foreground">
-              {currentUser.trim() || 'Sign in above to book a lesson'}
-            </div>
-          </div>
-
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <Label>Tutor</Label>
@@ -209,11 +203,6 @@ export function AddLessonDialog({ open, onOpenChange, date, tutors, rooms, lesso
             </div>
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="note">Note (optional)</Label>
-            <Input id="note" value={note} onChange={(e) => setNote(e.target.value)} />
-          </div>
-
           {conflictMessages.length > 0 && (
             <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-2.5 text-sm text-destructive">
               {conflictMessages.map((m, i) => (
@@ -224,7 +213,7 @@ export function AddLessonDialog({ open, onOpenChange, date, tutors, rooms, lesso
 
           <DialogFooter>
             <Button type="submit" disabled={submitting}>
-              {submitting ? 'Checking...' : 'Add lesson'}
+              {submitting ? 'Saving...' : 'Save changes'}
             </Button>
           </DialogFooter>
         </form>

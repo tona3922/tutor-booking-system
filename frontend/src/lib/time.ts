@@ -14,6 +14,11 @@ export function addMinutesToTime(time: string, minutes: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
+export function isMonday(dateStr: string): boolean {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(y, m - 1, d).getDay() === 1
+}
+
 export function generateTimeSlots(startMinutes: number, endMinutes: number, stepMinutes: number): string[] {
   const slots: string[] = []
   for (let m = startMinutes; m <= endMinutes; m += stepMinutes) {

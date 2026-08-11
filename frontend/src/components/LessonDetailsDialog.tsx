@@ -1,27 +1,33 @@
-import type { Conflict, Lesson } from '../api'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import type { Conflict, Lesson } from "../api";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
-import { Separator } from '@/components/ui/separator'
-import { CONFLICT_LABEL, STATUS_LABEL, statusVariant } from '../lib/lesson-status'
-import { addMinutesToTime, formatTime } from '../lib/time'
+} from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
+import {
+  CONFLICT_LABEL,
+  STATUS_LABEL,
+  statusVariant,
+} from "../lib/lesson-status";
+import { addMinutesToTime, formatTime } from "../lib/time";
+import { sameName } from "../lib/user";
 
 interface Props {
-  lesson: Lesson | null
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  tutorName: (id: number) => string
-  roomLabel: (id: number) => string
-  conflicts: Conflict[]
-  onCancel: (id: number) => void
-  cancelling: number | null
+  lesson: Lesson | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  tutorName: (id: number) => string;
+  roomLabel: (id: number) => string;
+  conflicts: Conflict[];
+  onCancel: (id: number) => void;
+  onEdit: (lesson: Lesson) => void;
+  cancelling: number | null;
+  currentUser: string;
 }
 
 export function LessonDetailsDialog({
@@ -32,27 +38,30 @@ export function LessonDetailsDialog({
   roomLabel,
   conflicts,
   onCancel,
+  onEdit,
   cancelling,
+  currentUser,
 }: Props) {
-  if (!lesson) return null
+  if (!lesson) return null;
 
-  const start = formatTime(lesson.startTime)
-  const end = formatTime(addMinutesToTime(lesson.startTime, lesson.durationMin))
+  const start = formatTime(lesson.startTime);
+  const end = formatTime(
+    addMinutesToTime(lesson.startTime, lesson.durationMin),
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{lesson.student}</DialogTitle>
-          <DialogDescription>
-            {roomLabel(lesson.roomId)} &middot; {lesson.date} &middot; {start}&ndash;{end}
-          </DialogDescription>
+          <DialogTitle>Class details</DialogTitle>
         </DialogHeader>
 
         <div className="flex flex-col gap-3 text-sm">
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Status</span>
-            <Badge variant={statusVariant(lesson.status)}>{STATUS_LABEL[lesson.status]}</Badge>
+            <Badge variant={statusVariant(lesson.status)}>
+              {STATUS_LABEL[lesson.status]}
+            </Badge>
           </div>
 
           <Separator />
@@ -71,7 +80,9 @@ export function LessonDetailsDialog({
           </div>
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Time</span>
-            <span className="font-medium">{start}&ndash;{end} ({lesson.durationMin} min)</span>
+            <span className="font-medium">
+              {start}&ndash;{end} ({lesson.durationMin} min)
+            </span>
           </div>
 
           {lesson.note && (
@@ -87,7 +98,9 @@ export function LessonDetailsDialog({
               <div className="flex flex-col gap-1.5">
                 {conflicts.map((c, i) => (
                   <div key={i} className="flex items-center gap-2">
-                    <Badge variant="destructive">{CONFLICT_LABEL[c.type] ?? c.type}</Badge>
+                    <Badge variant="destructive">
+                      {CONFLICT_LABEL[c.type] ?? c.type}
+                    </Badge>
                     <span className="text-muted-foreground">{c.message}</span>
                   </div>
                 ))}
@@ -96,18 +109,26 @@ export function LessonDetailsDialog({
           )}
         </div>
 
-        {lesson.status === 'BOOKED' && (
+        {lesson.status === "BOOKED" && sameName(lesson.student, currentUser) && (
           <DialogFooter>
+            <Button variant="outline" onClick={() => onEdit(lesson)}>
+              Edit lesson
+            </Button>
             <Button
-              variant="ghost"
+              className="bg-destructive text-white hover:bg-destructive/90"
               disabled={cancelling === lesson.id}
               onClick={() => onCancel(lesson.id)}
             >
-              {cancelling === lesson.id ? 'Cancelling...' : 'Cancel lesson'}
+              {cancelling === lesson.id ? "Cancelling..." : "Cancel lesson"}
             </Button>
           </DialogFooter>
         )}
+        {lesson.status === "BOOKED" && !sameName(lesson.student, currentUser) && (
+          <p className="text-xs text-muted-foreground">
+            Only {lesson.student} can edit or cancel this lesson.
+          </p>
+        )}
       </DialogContent>
     </Dialog>
-  )
+  );
 }
