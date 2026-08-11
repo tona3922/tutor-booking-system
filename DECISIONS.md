@@ -26,18 +26,24 @@ whole day's schedule in their head.
   validation a live booking gets, but still be able to surface whatever rule violations that import
   carries — a lesson already on a Monday, a tutor already over 6/day, etc.
 
-### Non-functional / explicitly out of scope
+### Non-functional
 
-- Single centre, ~12 tutors, one receptionist's laptop — no need for horizontal scale, so writes are
-  serialized with row locks rather than resolved optimistically.
+- Availability — target 24/7 booking, flagged not yet met (single instance, no redundancy)
+- Latency — target p99 < 100ms for a booking write
+- Consistency over availability
+- Backup & recovery — target RTO ≤ 2 min, flagged not yet met (no automated backup/replication configured)
+- Durability of history — added since it's already true today: cancelled/moved rows are kept, not deleted
+
+### Out of scope
+
 - No auth or access control. The frontend's "signed in as" name gates which UI buttons render; the API
   itself has no session and takes no user identity.
 - No admin UI for tutors/rooms — the roster is edited directly in `data.sql`.
 - No notification path — a moved/cancelled lesson has no way to reach the tutor other than opening the
   tool.
-- Student identity is a trimmed, case-insensitive name string, not an id — no `Student` table.
 
 ## 3. Data Model
+<img width="733" height="484" alt="image" src="https://github.com/user-attachments/assets/0ea0ee0a-99f1-40c7-a566-cb1a14a527c0" />
 
 - `Tutor(id, name, subject, phone)` — 12 rows, 3 each across Maths, English, Physics, Chemistry.
 - `Room(id, label)` — 6 fixed rows.
@@ -54,13 +60,149 @@ whole day's schedule in their head.
 | Method | Path                           | Purpose                                                   |
 | ------ | ------------------------------ | --------------------------------------------------------- |
 | GET    | `/api/lessons?date=`           | A day's schedule                                          |
-| GET    | `/api/conflicts?date=`         | Conflicts already present in that day's saved data        |
 | POST   | `/api/lessons`                 | Create; `409` + structured conflict list on failure       |
 | PATCH  | `/api/lessons/{id}/cancel`     | Cancel; returns whether it falls inside the 4-hour window |
 | PATCH  | `/api/lessons/{id}/reschedule` | The only way to move a lesson (old row → `MOVED`)         |
-| GET    | `/api/tutors`                  | Tutor lookup                                              |
-| GET    | `/api/rooms`                   | Room lookup                                               |
 
+### `GET /api/lessons?date=2026-03-06`
+
+No request body.
+
+```json
+// 200 OK
+[
+  {
+    "id": 21,
+    "date": "2026-03-06",
+    "startTime": "11:30:00",
+    "durationMin": 60,
+    "student": "Tran Bao Long",
+    "tutorId": 1,
+    "roomId": 1,
+    "status": "BOOKED",
+    "cancelledAt": null,
+    "note": null,
+    "movedFromLessonId": null,
+    "createdAt": "2026-08-11T17:30:36.115963",
+    "endTime": "12:30:00"
+  }
+]
+```
+
+### `POST /api/lessons`
+
+```json
+// request
+{
+  "date": "2026-03-06",
+  "startTime": "15:00:00",
+  "durationMin": 60,
+  "student": "Toan Vo",
+  "tutorId": 3,
+  "roomId": 6,
+  "note": null
+}
+```
+
+```json
+// 201 Created
+{
+  "id": 38,
+  "date": "2026-03-06",
+  "startTime": "15:00:00",
+  "durationMin": 60,
+  "student": "Toan Vo",
+  "tutorId": 3,
+  "roomId": 6,
+  "status": "BOOKED",
+  "cancelledAt": null,
+  "note": null,
+  "movedFromLessonId": null,
+  "createdAt": "2026-08-11T21:00:17.594555",
+  "endTime": "16:00:00"
+}
+```
+
+```json
+// 409 Conflict — validateAgainstExisting() rejected it
+{
+  "error": "Scheduling conflict",
+  "conflicts": [
+    {
+      "type": "TUTOR_DOUBLE_BOOKED",
+      "lessonIds": [20],
+      "message": "Tutor 3 is already booked (lesson 20)"
+    }
+  ]
+}
+```
+
+### `PATCH /api/lessons/{id}/cancel`
+
+No request body.
+
+```json
+// 200 OK
+{
+  "lesson": {
+    "id": 38,
+    "date": "2026-03-06",
+    "startTime": "15:00:00",
+    "durationMin": 60,
+    "student": "Toan Vo",
+    "tutorId": 3,
+    "roomId": 6,
+    "status": "CANCELLED",
+    "cancelledAt": "2026-08-12T09:14:02.001",
+    "note": null,
+    "movedFromLessonId": null,
+    "createdAt": "2026-08-11T21:00:17.594555",
+    "endTime": "16:00:00"
+  },
+  "chargeable": false
+}
+```
+
+`chargeable` is `true` when `cancelledAt` falls inside 4 hours of `date` + `startTime` — nothing currently
+acts on it.
+
+### `PATCH /api/lessons/{id}/reschedule`
+
+Response is the **new** row — the old id (`43` here) still exists in the database with `status: "MOVED"`.
+
+```json
+// request
+{
+  "date": "2026-03-06",
+  "startTime": "16:00:00",
+  "durationMin": 60,
+  "tutorId": 3,
+  "roomId": 5,
+  "note": null
+}
+```
+
+```json
+// 200 OK
+{
+  "id": 44,
+  "date": "2026-03-06",
+  "startTime": "16:00:00",
+  "durationMin": 60,
+  "student": "Toan Vo",
+  "tutorId": 3,
+  "roomId": 5,
+  "status": "BOOKED",
+  "cancelledAt": null,
+  "note": null,
+  "movedFromLessonId": 43,
+  "createdAt": "2026-08-11T22:15:53.643537",
+  "endTime": "17:00:00"
+}
+```
+
+`student` is carried over from the original row — `reschedule` has no `student` field in its request body,
+since who the lesson is for can't change, only when/where/with whom.
 ## 5. High-level Design
 
 <img width="877" height="582" alt="image" src="https://github.com/user-attachments/assets/0d4ca9e5-fc0a-422f-b59f-fa8ee106cd4f" />
