@@ -2,11 +2,12 @@ import { useState } from "react";
 import type { Conflict, Lesson, Room, Tutor } from "../api";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { STATUS_LABEL, statusVariant } from "../lib/lesson-status";
 import { addMinutesToTime, formatTime } from "../lib/time";
 import { sameName } from "../lib/user";
-import { EditLessonDialog } from "./EditLessonDialog";
-import { LessonDetailsDialog } from "./LessonDetailsDialog";
+import { EditLessonForm } from "./EditLessonForm";
+import { LessonDetailsView } from "./LessonDetailsView";
 
 interface Props {
   rooms: Room[];
@@ -33,8 +34,13 @@ export function RoomBoard({
   cancelling,
   currentUser,
 }: Props) {
-  const [selected, setSelected] = useState<Lesson | null>(null);
-  const [editing, setEditing] = useState<Lesson | null>(null);
+  const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
+  const [mode, setMode] = useState<"details" | "edit">("details");
+
+  const closeModal = () => {
+    setActiveLesson(null);
+    setMode("details");
+  };
 
   return (
     <>
@@ -67,7 +73,10 @@ export function RoomBoard({
                     <button
                       key={lesson.id}
                       type="button"
-                      onClick={() => setSelected(lesson)}
+                      onClick={() => {
+                        setActiveLesson(lesson);
+                        setMode("details");
+                      }}
                       className={`flex w-full items-center gap-3 px-(--card-spacing) py-2.5 text-left transition-colors hover:bg-muted/50 ${
                         lessonConflicts.length > 0 ? "bg-destructive/5" : ""
                       }`}
@@ -119,35 +128,43 @@ export function RoomBoard({
         })}
       </div>
 
-      <LessonDetailsDialog
-        lesson={selected}
-        open={selected !== null}
+      <Dialog
+        open={activeLesson !== null}
         onOpenChange={(open) => {
-          if (!open) setSelected(null);
+          if (!open) closeModal();
         }}
-        tutorName={tutorName}
-        roomLabel={roomLabel}
-        conflicts={selected ? (conflictsByLesson.get(selected.id) ?? []) : []}
-        onCancel={onCancel}
-        onEdit={(lesson) => {
-          setEditing(lesson);
-          setSelected(null);
-        }}
-        cancelling={cancelling}
-        currentUser={currentUser}
-      />
-
-      <EditLessonDialog
-        lesson={editing}
-        open={editing !== null}
-        onOpenChange={(open) => {
-          if (!open) setEditing(null);
-        }}
-        tutors={tutors}
-        rooms={rooms}
-        lessons={lessons}
-        onUpdated={onUpdated}
-      />
+      >
+        <DialogContent className="sm:max-w-md">
+          {activeLesson &&
+            (mode === "details" ? (
+              <div key="details" className="animate-in fade-in-0 duration-200">
+                <LessonDetailsView
+                  lesson={activeLesson}
+                  tutorName={tutorName}
+                  roomLabel={roomLabel}
+                  conflicts={conflictsByLesson.get(activeLesson.id) ?? []}
+                  onCancel={onCancel}
+                  onEdit={() => setMode("edit")}
+                  cancelling={cancelling}
+                  currentUser={currentUser}
+                />
+              </div>
+            ) : (
+              <div key="edit" className="animate-in fade-in-0 duration-200">
+                <EditLessonForm
+                  lesson={activeLesson}
+                  tutors={tutors}
+                  rooms={rooms}
+                  lessons={lessons}
+                  onSaved={() => {
+                    onUpdated();
+                    closeModal();
+                  }}
+                />
+              </div>
+            ))}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
