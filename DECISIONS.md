@@ -220,6 +220,9 @@ whether `now` falls inside the 4-hour window.
 ### 6.2. Schedule Flow
 <img width="748" height="385" alt="image" src="https://github.com/user-attachments/assets/9bc4594c-5d16-4af0-92d4-0c327df15bcf" />
 
-The schedule read is a plain query. The conflicts read is the counterpart to §6.1's write-time check, run
+The schedule read is a plain query. The conflicts read is the counterpart to 6.1's write-time check, run
 against whatever is already committed — it's what lets a CSV-backfilled Monday lesson or a
 seven-lessons-in-a-day tutor surface without ever having been rejected on the way in.
+
+## 7. Demo
+https://drive.google.com/file/d/1Km6A0JTk8xU0Qi2W_nrObf-Rtrmz_c0u/view?usp=sharing
