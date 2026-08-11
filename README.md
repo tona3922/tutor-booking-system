@@ -9,6 +9,10 @@ the reasoning, the rules this enforces, and what's deliberately left out of scop
 - `service/` — Spring Boot (Java 17, Maven) REST API, Postgres.
 - `frontend/` — React + Vite + TypeScript: a single schedule view for one day at a time, with
   conflicts highlighted and a form to add a lesson.
+## Diagram
+High-level design diagram
+Use-case diagram
+<img width="792" height="648" alt="image" src="https://github.com/user-attachments/assets/e9758022-878f-49e5-a1d4-53b4f53914c1" />
 
 ## Domain model
 
