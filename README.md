@@ -12,6 +12,7 @@ the reasoning, the rules this enforces, and what's deliberately left out of scop
 ## Diagram
 - High-level design diagram
 <img width="877" height="582" alt="image" src="https://github.com/user-attachments/assets/c911d832-6ee8-49c1-80a1-7442d56eb513" />
+
 - Use-case diagram
 <img width="792" height="648" alt="image" src="https://github.com/user-attachments/assets/e9758022-878f-49e5-a1d4-53b4f53914c1" />
 
@@ -27,13 +28,6 @@ the reasoning, the rules this enforces, and what's deliberately left out of scop
 ```bash
 cd service
 mvn spring-boot:run
-```
-
-If `java`/`mvn` aren't on PATH (Homebrew `openjdk@17` + `maven`):
-
-```bash
-export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
-export PATH="$JAVA_HOME/bin:$PATH"
 ```
 
 API listens on `http://localhost:8080`. Requires a local Postgres reachable at the URL in
@@ -79,9 +73,6 @@ time (`L033`/`L034`).
 - `PATCH /api/lessons/{id}/reschedule` — the only way to move a lesson; the old row becomes
   `MOVED` and a new, freshly-validated row is created (see `DECISIONS.md` for why).
 - `GET /api/tutors`, `GET /api/rooms` — lookups.
-
-Concurrency: `LessonServiceConcurrencyTest` (Testcontainers, needs Docker) proves two overlapping
-create requests for the same room/tutor can't both succeed — `mvn test` from `service/`.
 
 ## Run the frontend
 
