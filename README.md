@@ -1,21 +1,21 @@
-# Booking System
+# Bright Path Learning Centre — scheduling & conflict detection
 
-Car dealership service booking: customers book a technician, service bay, and dealership for their vehicle.
+An internal tool for a one-location tutoring centre in Da Nang: Mai (the receptionist) currently
+runs the whole schedule from a spreadsheet and WhatsApp. This build does one thing — **detect and
+prevent scheduling conflicts** (a student, tutor, or room double-booked; a tutor over the daily
+booking cap) — chosen over everything else this tool could eventually do. See `DECISIONS.md` for
+the reasoning, the rules this enforces, and what's deliberately left out of scope.
 
-- `service/` — Spring Boot (Java 17, Maven) REST API, in-memory H2 by default.
-- `frontend/` — React + Vite + TypeScript UI: browse dealerships/availability freely, then log
-  in/sign up and pick a vehicle only once you're ready to confirm a booking. A "View my bookings"
-  entry point lets a returning customer log in and see/cancel their appointments directly.
+- `service/` — Spring Boot (Java 17, Maven) REST API, Postgres.
+- `frontend/` — React + Vite + TypeScript: a single schedule view for one day at a time, with
+  conflicts highlighted and a form to add a lesson.
 
 ## Domain model
 
-- `Customer` — owns `Vehicle`s
-- `Vehicle` — belongs to one `Customer`
-- `Dealership` — service location
-- `Technician` — belongs to one `Dealership`
-- `ServiceBay` — belongs to one `Dealership`
-- `Booking` — customer + vehicle + dealership + service bay + start/end time + status (`PENDING`, `CONFIRMED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`)
-- `BookingTechnician` — join table assigning one or more technicians to a booking, with a `role`
+- `Tutor(id, name, subject, phone)`
+- `Room(id, label)` — 6 fixed rooms.
+- `Lesson(id, date, startTime, durationMin, student, tutorId, roomId, status, cancelledAt, note, movedFromLessonId, createdAt)`,
+  `status ∈ {BOOKED, CANCELLED, NO_SHOW, MOVED}`.
 
 ## Run the service
 
@@ -24,42 +24,59 @@ cd service
 mvn spring-boot:run
 ```
 
-API listens on `http://localhost:8080`. Resources: `/api/customers`, `/api/vehicles`, `/api/dealerships`,
-`/api/technicians`, `/api/service-bays`, `/api/bookings`. Booking endpoints also include
-`POST/DELETE /api/bookings/{id}/technicians[/{technicianId}]` for assigning technicians, plus
-`PATCH .../status` and `POST .../cancel`.
-
-Server-side validation: a vehicle must belong to the booking's customer, a service bay/technician must belong to
-the booking's dealership, and overlapping bookings on the same bay or technician are rejected with `409 Conflict`.
-
-**Availability search**: `GET /api/technicians` and `GET /api/service-bays` accept optional `name`/`bayNumber`,
-`dealershipId`, and `startTime`+`endTime` (must be given together) query params — when a time window is given,
-only entries with `status=AVAILABLE` and no overlapping booking in that window are returned.
-`GET /api/dealerships/availability?startTime=&endTime=&name=` (time required) returns each matching dealership
-annotated with `availableBayCount`/`availableTechnicianCount` for that window — this is what backs the frontend's
-search dashboard. No new tables: it's computed on the fly from existing bookings, so there's nothing to keep in sync.
-
-**Authentication**: JWT bearer tokens. `POST /api/auth/register` and `POST /api/auth/login` return
-`{token, customer}`; send `Authorization: Bearer <token>` on subsequent requests. `/api/vehicles/**`,
-`/api/bookings/**`, and `/api/customers/me` all require a valid token, and the server derives
-`customerId` from the token rather than trusting a client-supplied value — a booking, vehicle, or
-customer record can only be read/modified by the customer who owns it (`403` otherwise). Passwords
-are hashed with BCrypt; the JWT signing secret lives in `application.yml` under `app.jwt.secret`
-(override via `APP_JWT_SECRET` before any real deployment — the checked-in value is dev-only).
-`/api/dealerships/**`, `/api/technicians/**`, and `/api/service-bays/**` remain fully public in
-both directions (browsing and management) since there's no admin role yet — anyone can currently
-create/edit dealerships, technicians, and bays. Adding an admin role to lock those down would be a
-natural next step.
-
-H2 console: `http://localhost:8080/h2-console` (JDBC URL `jdbc:h2:mem:bookingdb`, user `sa`, no password).
-
-Note: `java`/`mvn` weren't on PATH in this environment but are installed via Homebrew
-(`openjdk@17`, `maven`). Either `brew link openjdk@17` or export before running:
+If `java`/`mvn` aren't on PATH (Homebrew `openjdk@17` + `maven`):
 
 ```bash
 export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
 export PATH="$JAVA_HOME/bin:$PATH"
 ```
+
+API listens on `http://localhost:8080`. Requires a local Postgres reachable at the URL in
+`service/src/main/resources/application.yml` (defaults to `jdbc:postgresql://localhost:5433/bookingdb`).
+
+**Load the seed data** (translated from the take-home brief's `tutors.csv`/`lessons_export.csv`) once the
+schema exists (`ddl-auto: update` creates the tables on first run, then stop the app and load data):
+
+```bash
+psql -p 5433 -U tommyvo -d bookingdb -f service/src/main/resources/data.sql
+```
+
+Seeds 6 rooms, the 3 tutors from the export, and all 34 lessons — including the rule violations
+that were already in the real data (see below). Safe to re-run.
+
+### Pinned date
+
+The seed data covers **2026-03-03 through 2026-03-10**. "Today" is pinned in code
+(`service/.../time/NowProvider.java`) to **2026-03-06 09:00** — a Friday inside that week, and the
+day a tutor goes over the daily booking cap in the data — rather than the real clock. The frontend
+defaults its date picker to the same date.
+
+### What loading the seed data shows
+
+`GET /api/conflicts?date=2026-03-04` → `Le Minh Chau` double-booked into two lessons at once
+(`L007`/`L008`) — the exact "booked into two places" failure the owner describes — while the
+same day's `L009`/`L010` (one tutor, one room, two different students, identical slot) is **not**
+flagged, since that's the receptionist's own sanctioned "exam pair" practice.
+
+`GET /api/conflicts?date=2026-03-06` → a tutor with 7 bookings against a 6/day cap.
+
+`GET /api/conflicts?date=2026-03-10` → a tutor double-booked into two different rooms at the same
+time (`L033`/`L034`).
+
+## API
+
+- `GET /api/lessons?date=YYYY-MM-DD` — a day's schedule (defaults to the pinned date).
+- `GET /api/conflicts?date=YYYY-MM-DD` — every conflict found in that day's existing schedule.
+- `POST /api/lessons` — create a lesson; validated against the same rules before committing;
+  `409` with a structured conflict list on failure.
+- `PATCH /api/lessons/{id}/cancel` — cancel; response includes whether it's chargeable (inside
+  the 4-hour window).
+- `PATCH /api/lessons/{id}/reschedule` — the only way to move a lesson; the old row becomes
+  `MOVED` and a new, freshly-validated row is created (see `DECISIONS.md` for why).
+- `GET /api/tutors`, `GET /api/rooms` — lookups.
+
+Concurrency: `LessonServiceConcurrencyTest` (Testcontainers, needs Docker) proves two overlapping
+create requests for the same room/tutor can't both succeed — `mvn test` from `service/`.
 
 ## Run the frontend
 

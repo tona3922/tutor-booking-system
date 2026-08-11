@@ -1,60 +1,70 @@
--- Sample seed data for local development (PostgreSQL, persistent).
+-- Seed data for local development (PostgreSQL, persistent).
+-- Source: the Bright Path take-home brief's tutors.csv and lessons_export.csv (front-desk
+-- spreadsheet export dated 2026-03-10), translated 1:1 onto the Room/Tutor/Lesson schema.
 -- Not auto-run by Spring Boot (Postgres isn't an embedded DB) -- apply once with:
 --   psql -p 5433 -U tommyvo -d bookingdb -f data.sql
 -- Idempotent: safe to re-run, existing rows are left untouched.
--- All customers below share the demo password: password123
+--
+-- Cancelled-at timestamps in the source CSV carry a +07:00 offset; the `cancelled_at` column is
+-- a plain LocalDateTime, so the offset is dropped on the assumption that every timestamp in the
+-- export is already centre-local time (see DECISIONS.md).
 
-INSERT INTO dealership (id, name, address, open_time, close_time) VALUES
-  (1, 'Downtown Auto Service', '123 Main St, Springfield', '2000-01-01 08:00:00', '2000-01-01 18:00:00'),
-  (2, 'Westside Motors Service Center', '456 Oak Ave, Springfield', '2000-01-01 07:30:00', '2000-01-01 19:00:00')
+-- Six rooms per the brief ("six rooms above a bakery"); the sample week only ever uses R1-R3.
+INSERT INTO room (id, label) VALUES
+  (1, 'R1'),
+  (2, 'R2'),
+  (3, 'R3'),
+  (4, 'R4'),
+  (5, 'R5'),
+  (6, 'R6')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO technician (id, dealership_id, name, skill, status) VALUES
-  (1, 1, 'John Carter', 'Engine Repair', 'AVAILABLE'),
-  (2, 1, 'Maria Lopez', 'Brakes & Suspension', 'AVAILABLE'),
-  (3, 1, 'Sam Nguyen', 'Electrical Systems', 'BUSY'),
-  (4, 2, 'David Kim', 'Transmission', 'AVAILABLE'),
-  (5, 2, 'Priya Patel', 'Tire & Alignment', 'OFF_DUTY')
+-- The centre has 12 tutors on payroll; tutors.csv only exercises these 3.
+INSERT INTO tutor (id, name, subject, phone) VALUES
+  (1, 'Ngoc Anh', 'Maths', '090xxx1122'),
+  (2, 'Pham Duc', 'English', '090xxx3344'),
+  (3, 'Le Thu', 'Physics', '090xxx5566')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO service_bay (id, dealership_id, bay_number, status) VALUES
-  (1, 1, 'A1', 'AVAILABLE'),
-  (2, 1, 'A2', 'OCCUPIED'),
-  (3, 1, 'A3', 'AVAILABLE'),
-  (4, 2, 'B1', 'AVAILABLE'),
-  (5, 2, 'B2', 'MAINTENANCE')
+-- lessons_export.csv, L001-L034, loaded as-is (including its rule violations - see
+-- GET /api/conflicts and DECISIONS.md for why these are detected rather than rejected on import).
+INSERT INTO lesson (id, date, start_time, duration_min, student, tutor_id, room_id, status, cancelled_at, note, created_at) VALUES
+  (1,  '2026-03-03', '09:00', 60, 'Le Minh Chau',   1, 1, 'BOOKED',    NULL, NULL, now()),
+  (2,  '2026-03-03', '09:00', 60, 'Tran Bao Long',  2, 2, 'BOOKED',    NULL, NULL, now()),
+  (3,  '2026-03-03', '10:30', 90, 'Nguyen Thi Ha',  1, 1, 'BOOKED',    NULL, NULL, now()),
+  (4,  '2026-03-03', '10:30', 60, 'Do Van Kien',    3, 3, 'BOOKED',    NULL, NULL, now()),
+  (5,  '2026-03-03', '14:00', 60, 'Vu Ha My',       2, 2, 'CANCELLED', '2026-03-03 08:15:00', 'family cancelled', now()),
+  (6,  '2026-03-03', '15:30', 90, 'Bui An Nhien',   1, 1, 'BOOKED',    NULL, NULL, now()),
+  (7,  '2026-03-04', '09:00', 60, 'Le Minh Chau',   3, 3, 'BOOKED',    NULL, NULL, now()),
+  (8,  '2026-03-04', '09:00', 60, 'Le Minh Chau',   2, 2, 'BOOKED',    NULL, 'added by phone; family confirmed', now()),
+  (9,  '2026-03-04', '11:00', 90, 'Tran Bao Long',  1, 1, 'BOOKED',    NULL, 'exam pair - half price', now()),
+  (10, '2026-03-04', '11:00', 90, 'Nguyen Thi Ha',  1, 1, 'BOOKED',    NULL, 'exam pair - half price', now()),
+  (11, '2026-03-04', '14:00', 60, 'Do Van Kien',    3, 3, 'BOOKED',    NULL, NULL, now()),
+  (12, '2026-03-04', '16:00', 60, 'Vu Ha My',       2, 2, 'BOOKED',    NULL, NULL, now()),
+  (13, '2026-03-05', '09:00', 60, 'Bui An Nhien',   1, 1, 'BOOKED',    NULL, NULL, now()),
+  (14, '2026-03-05', '10:30', 90, 'Le Minh Chau',   3, 3, 'BOOKED',    NULL, NULL, now()),
+  (15, '2026-03-05', '13:00', 60, 'Tran Bao Long',  2, 2, 'NO_SHOW',   NULL, NULL, now()),
+  (16, '2026-03-05', '14:30', 90, 'Nguyen Thi Ha',  1, 1, 'BOOKED',    NULL, NULL, now()),
+  (17, '2026-03-05', '16:00', 60, 'Do Van Kien',    3, 3, 'CANCELLED', '2026-03-05 14:40:00', 'tutor sick', now()),
+  (18, '2026-03-06', '09:00', 60, 'Vu Ha My',       1, 1, 'BOOKED',    NULL, NULL, now()),
+  (19, '2026-03-06', '09:00', 60, 'Le Minh Chau',   2, 2, 'BOOKED',    NULL, NULL, now()),
+  (20, '2026-03-06', '10:30', 90, 'Bui An Nhien',   3, 3, 'BOOKED',    NULL, NULL, now()),
+  (21, '2026-03-06', '11:30', 60, 'Tran Bao Long',  1, 1, 'BOOKED',    NULL, NULL, now()),
+  (22, '2026-03-06', '13:00', 60, 'Tran Bao Long',  1, 1, 'BOOKED',    NULL, NULL, now()),
+  (23, '2026-03-06', '14:30', 60, 'Nguyen Thi Ha',  2, 2, 'BOOKED',    NULL, NULL, now()),
+  (24, '2026-03-06', '16:00', 60, 'Do Van Kien',    1, 1, 'BOOKED',    NULL, NULL, now()),
+  (25, '2026-03-06', '17:30', 60, 'Vu Ha My',       1, 1, 'BOOKED',    NULL, NULL, now()),
+  (26, '2026-03-06', '19:00', 60, 'Le Minh Chau',   1, 1, 'BOOKED',    NULL, NULL, now()),
+  (27, '2026-03-06', '20:30', 60, 'Bui An Nhien',   1, 1, 'BOOKED',    NULL, NULL, now()),
+  (28, '2026-03-07', '09:00', 90, 'Tran Bao Long',  3, 3, 'BOOKED',    NULL, NULL, now()),
+  (29, '2026-03-07', '11:00', 60, 'Nguyen Thi Ha',  2, 2, 'BOOKED',    NULL, NULL, now()),
+  (30, '2026-03-07', '15:00', 60, 'Bui An Nhien',   1, 1, 'BOOKED',    NULL, NULL, now()),
+  (31, '2026-03-08', '10:00', 60, 'Do Van Kien',    1, 1, 'BOOKED',    NULL, NULL, now()),
+  (32, '2026-03-09', '10:00', 60, 'Vu Ha My',       3, 3, 'BOOKED',    NULL, 'moved from Sunday at the family''s request', now()),
+  (33, '2026-03-10', '09:00', 60, 'Le Minh Chau',   1, 1, 'BOOKED',    NULL, NULL, now()),
+  (34, '2026-03-10', '09:00', 60, 'Tran Bao Long',  1, 2, 'BOOKED',    NULL, NULL, now())
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO customer (id, name, phone, email, password_hash) VALUES
-  (1, 'Alice Johnson', '555-0101', 'alice.johnson@example.com', '$2y$10$1ndrmRxARt1zhXGRI9W7BepZVPKiUaKu/4CvHQNZE8uGNtbs5qf8y'),
-  (2, 'Brian Smith', '555-0102', 'brian.smith@example.com', '$2y$10$1ndrmRxARt1zhXGRI9W7BepZVPKiUaKu/4CvHQNZE8uGNtbs5qf8y'),
-  (3, 'Carla Diaz', '555-0103', 'carla.diaz@example.com', '$2y$10$1ndrmRxARt1zhXGRI9W7BepZVPKiUaKu/4CvHQNZE8uGNtbs5qf8y')
-ON CONFLICT (id) DO NOTHING;
-
-INSERT INTO vehicle (id, customer_id, plate_number, brand, model, vehicle_year) VALUES
-  (1, 1, 'ABC-1234', 'Toyota', 'Camry', 2019),
-  (2, 1, 'XYZ-9988', 'Honda', 'CR-V', 2021),
-  (3, 2, 'LMN-4567', 'Ford', 'F-150', 2018),
-  (4, 3, 'QRS-7788', 'Tesla', 'Model 3', 2022)
-ON CONFLICT (id) DO NOTHING;
-
-INSERT INTO booking (id, customer_id, vehicle_id, dealership_id, service_bay_id, start_time, end_time, status, created_at) VALUES
-  (1, 1, 1, 1, 1, '2026-08-05 09:00:00', '2026-08-05 11:00:00', 'CONFIRMED', '2026-08-01 10:00:00'),
-  (2, 1, 2, 1, 2, '2026-08-06 13:00:00', '2026-08-06 15:00:00', 'PENDING', '2026-08-02 09:30:00'),
-  (3, 2, 3, 2, 4, '2026-08-05 10:00:00', '2026-08-05 12:30:00', 'IN_PROGRESS', '2026-08-01 14:15:00'),
-  (4, 3, 4, 1, 3, '2026-08-03 08:00:00', '2026-08-03 09:30:00', 'COMPLETED', '2026-07-29 11:00:00')
-ON CONFLICT (id) DO NOTHING;
-
-INSERT INTO booking_technician (booking_id, technician_id, role, assigned_at) VALUES
-  (1, 1, 'Lead Technician', '2026-08-01 10:05:00'),
-  (1, 2, 'Assistant', '2026-08-01 10:05:00'),
-  (3, 4, 'Lead Technician', '2026-08-01 14:20:00'),
-  (4, 3, 'Lead Technician', '2026-07-29 11:05:00')
-ON CONFLICT (booking_id, technician_id) DO NOTHING;
-
-SELECT setval(pg_get_serial_sequence('dealership', 'id'), GREATEST((SELECT MAX(id) FROM dealership), 1));
-SELECT setval(pg_get_serial_sequence('technician', 'id'), GREATEST((SELECT MAX(id) FROM technician), 1));
-SELECT setval(pg_get_serial_sequence('service_bay', 'id'), GREATEST((SELECT MAX(id) FROM service_bay), 1));
-SELECT setval(pg_get_serial_sequence('customer', 'id'), GREATEST((SELECT MAX(id) FROM customer), 1));
-SELECT setval(pg_get_serial_sequence('vehicle', 'id'), GREATEST((SELECT MAX(id) FROM vehicle), 1));
-SELECT setval(pg_get_serial_sequence('booking', 'id'), GREATEST((SELECT MAX(id) FROM booking), 1));
+SELECT setval(pg_get_serial_sequence('room', 'id'), GREATEST((SELECT MAX(id) FROM room), 1));
+SELECT setval(pg_get_serial_sequence('tutor', 'id'), GREATEST((SELECT MAX(id) FROM tutor), 1));
+SELECT setval(pg_get_serial_sequence('lesson', 'id'), GREATEST((SELECT MAX(id) FROM lesson), 1));
