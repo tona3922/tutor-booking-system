@@ -241,8 +241,12 @@ public class LessonService {
                     && !sameStudent;
 
             if (sameStudent) {
+                String otherTutorName = tutorRepository.findById(other.getTutorId())
+                        .map(Tutor::getName)
+                        .orElse("Tutor " + other.getTutorId());
                 conflicts.add(new ConflictDto(ConflictType.STUDENT_DOUBLE_BOOKED, List.of(other.getId()),
-                        candidate.getStudent() + " already has an overlapping lesson: " + other.getId()));
+                        candidate.getStudent() + " already has an overlapping lesson with tutor " + otherTutorName
+                                + " at " + other.getStartTime() + "–" + other.getEndTime()));
             }
             if (sameRoom && !examPairSlot) {
                 conflicts.add(new ConflictDto(ConflictType.ROOM_DOUBLE_BOOKED, List.of(other.getId()),
